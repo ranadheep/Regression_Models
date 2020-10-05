@@ -1,0 +1,125 @@
+---
+title: "Regression Models"
+author: "Ranadheep Reddy"
+date: "10/5/2020"
+output: html_document
+---
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://groupware.les.inf.puc-rio.br/har)
+(see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## Preprocessing
+
+First, We need to get the data imported and assign the according variables.
+
+```{r results="hide"}
+library(caret)
+library(ggplot2)
+library(randomForest)
+```
+
+```{r results="hide"}
+# Setting up a local work folder, easier for debugging
+setwd("C:/Users/Bablu/Downloads/coursera DS")
+
+#download Data from the course provided links
+train_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url=train_url, destfile="training.csv")
+
+test_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url=test_url, destfile="testing.csv")
+
+#Import both training and testing datasets
+train <- read.csv("training.csv", na.strings=c("NA","#DIV/0!",""))
+test <- read.csv("testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+names(train)
+str(train)
+summary(train)
+#The target prediction outcome
+summary(train$classe)
+```
+
+Then, we need to set aside 40 percent of the training data for cross validation purposes Typical split is 40 percent for validation and 60 percent for training itself.
+
+```{r results="hide"}
+inTrain <- createDataPartition(y=train$classe, p=0.6, list=FALSE)
+myTrain <- train[inTrain, ]
+myTest <- train[-inTrain, ]
+```
+
+Afterwards, we need to clean and structure the data using only valid indicators/features. Acertain selection of feature will be removed. They are in the following criterias: 1.Variables with variances that are close to zero (considered constant) 2.Variables with missing readings over 75% 3.Variables that are not fit to be predictors.
+
+```{r results="hide"}
+mytrain_SUB <- myTrain
+for (i in 1:length(myTrain)) {
+  if (sum(is.na(myTrain[ , i])) / nrow(myTrain) >= .75) {
+    for (j in 1:length(mytrain_SUB)) {
+      if (length(grep(names(myTrain[i]), names(mytrain_SUB)[j]))==1) {
+        mytrain_SUB <- mytrain_SUB[ , -j]
+      }
+    }
+  }
+}
+
+dim(mytrain_SUB)
+
+mytrain_SUB2 <- mytrain_SUB[,8:length(mytrain_SUB)]
+NZV <- nearZeroVar(mytrain_SUB2, saveMetrics = TRUE)
+
+keep <- names(mytrain_SUB2)
+```
+
+## Modeling Random forest prediction model
+
+I have test serval classification algorithm with them giving the same of similar prediction results including ANN, SVM, K-means and such. Among those, random forest gave the best result. Hence, this method is the one I have decided to use.
+
+First step for me after building the model is to test the model on the data that i setted aside in the training dataset.
+
+```{r}
+#Reproducibility set
+set.seed(556)
+#Random forest model fabrication
+modFit <- randomForest(as.factor(classe)~., data = mytrain_SUB2)
+print(modFit)
+```
+
+
+```{r}
+#cross validation on my testing data
+#out of sample error
+predict1 <- predict(modFit, myTest, type = "class")
+confusionMatrix(as.factor(myTest$classe), predict1)
+```
+
+```{r}
+#in sample error
+predict_train <- predict(modFit, myTrain, type = "class")
+confusionMatrix(as.factor(myTrain$classe), predict_train)
+```
+
+## Summary ofAccuracy and Error
+
+As shown in the accuracy result above, when tested on the subset data used for cross validation we get an accuracy of 99%. This can be used to estimate our out of sample error. On the other hand the fabricated model is fitted to the training portion of the data, we get an accuracy of 100%. This can be used to estimate the in sample error.
+
+## Verifying Prediction
+
+At last, the final step is to apply my Model on the test data set as imported from the course provided link.
+
+```{r}
+predict_FINAL <- predict(modFit, test, type = "class")
+print(predict_FINAL)
+```
